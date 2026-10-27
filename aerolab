@@ -1,1 +1,166 @@
 
+<!DOCTYPE html>
+<html lang="ka"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>აეროლაბი – თვითმფრინავის სიმულატორი</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef3f9;--card:#fff;--tx:#14202e;--mut:#5b6b7d;--ac:#2b6df0;--bd:#d6dfeb;--ok:#1a9d5a;--bad:#d6402f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1520;--card:#162233;--tx:#e6eef8;--mut:#93a4b8;--ac:#5b97ff;--bd:#27384e}}
+:root[data-theme="dark"]{--bg:#0d1520;--card:#162233;--tx:#e6eef8;--mut:#93a4b8;--ac:#5b97ff;--bd:#27384e}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Noto Sans Georgian",system-ui,sans-serif}
+header{padding:14px 18px 4px}h1{margin:0;font-size:22px;font-weight:800}header p{margin:2px 0 0;color:var(--mut)}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr) 300px;gap:12px;padding:12px 18px 24px;align-items:start}
+@media(max-width:1100px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}
+h2{margin:0 0 8px;font-size:15px}
+.sl{margin:8px 0}.sl label{display:flex;justify-content:space-between;font-size:13px}.sl b{color:var(--ac)}
+input[type=range]{width:100%;accent-color:var(--ac)}
+.tg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+button{font:inherit;border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:7px 10px;cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+canvas{width:100%;display:block;border-radius:10px}
+#hud{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+#hud span{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:3px 8px;font-size:13px}
+#hud b{font-weight:800}
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+#tip{background:var(--bg);border-left:4px solid var(--ac);border-radius:8px;padding:8px 10px;margin-top:8px;min-height:62px}
+#tip.warn{border-color:var(--bad)}
+table{width:100%;border-collapse:collapse}td{padding:3px 0;border-bottom:1px solid var(--bd)}td:last-child{text-align:right;font-weight:600}
+.ms{list-style:none;padding:0;margin:0}.ms li{padding:4px 0}.ms li.d{color:var(--ok);font-weight:600}
+small{color:var(--mut)}
+</style></head><body>
+<header><h1>✈ აეროლაბი</h1><p>ააწყვე თვითმფრინავი, გამოცადე აეროდინამიკა და გააფრინე! გამოიყენე <b>↑↓</b> (კუთხე), <b>←→</b> (გაზი), <b>G</b> (ბორბლები), <b>F</b> (ფლაპები).</p></header>
+<div class="grid">
+<section class="card"><h2>🔧 კომპონენტები</h2><canvas id="pv" width="300" height="190"></canvas><div id="sls"></div>
+<div class="tg" id="tgs"></div>
+<div class="tg"><button id="eP" class="on">🌀 ხრახნიანი</button><button id="eJ">🚀 რეაქტიული</button></div>
+<small>შენიშვნა: ცვლილებისას სიმულაცია თავიდან იწყება.</small></section>
+<section class="card"><canvas id="c" width="900" height="440"></canvas><div id="hud"></div>
+<div class="ctl"><div class="sl"><label>ცხვირის კუთხე (θ) <b id="pO"></b></label><input id="pitch" type="range" min="-8" max="22" step="0.5" value="0"></div>
+<div class="sl"><label>გაზი <b id="tO"></b></label><input id="thr" type="range" min="0" max="1" step="0.01" value="0"></div></div>
+<div class="tg"><button id="full">გაზი 100%</button><button id="rst">↺ თავიდან</button></div>
+<div id="tip"></div></section>
+<section class="card"><h2>📊 ექსპერტის ანალიზი</h2><table id="st"></table>
+<canvas id="pl" width="300" height="170" style="margin-top:10px"></canvas><small>CL–α მრუდი: წერტილი = ახლანდელი რეჟიმი</small>
+<h2 style="margin-top:12px">🎯 მისიები</h2><ul class="ms" id="ms"></ul></section></div>
+<script>
+const $=i=>document.getElementById(i),R=Math.PI/180;
+const cfg={area:16,ar:7,camber:2,tail:3.5,payload:150,flaps:false,winglets:false,gear:true,engine:'prop'};
+const SL=[['area','ფრთის ფართობი','მ²',10,40,1],['ar','წაგრძელება (AR)','',4,14,.5],['camber','პროფილის გამრუდება','%',0,6,.5],['tail','ჰორიზ. კუდი','მ²',1,8,.5],['payload','ტვირთი','კგ',0,500,25]];
+const TG=[['flaps','ფლაპები (F)'],['winglets','ვინგლეტები'],['gear','ბორბლები (G)']];
+SL.forEach(([k,l,u,mn,mx,st])=>{const d=document.createElement('div');d.className='sl';d.innerHTML=`<label>${l} <b id="v_${k}"></b></label><input type="range" id="i_${k}" min="${mn}" max="${mx}" step="${st}" value="${cfg[k]}">`;$('sls').appendChild(d);
+const f=()=>{cfg[k]=+$('i_'+k).value;$('v_'+k).textContent=cfg[k]+' '+u;cfgChanged()};$('i_'+k).oninput=f;$('v_'+k).textContent=cfg[k]+' '+u});
+TG.forEach(([k,l])=>{const b=document.createElement('button');b.id='t_'+k;b.textContent=l;b.className=cfg[k]?'on':'';b.onclick=()=>tog(k);$('tgs').appendChild(b)});
+function tog(k,noReset){cfg[k]=!cfg[k];$('t_'+k).classList.toggle('on',cfg[k]);if(!noReset)cfgChanged()}
+function eng(e){cfg.engine=e;$('eP').classList.toggle('on',e=='prop');$('eJ').classList.toggle('on',e=='jet');cfgChanged()}
+$('eP').onclick=()=>eng('prop');$('eJ').onclick=()=>eng('jet');
+function derive(){const c=cfg,S=c.area,AR=c.ar,span=Math.sqrt(S*AR);
+const m=420+S*16+S*AR*1.1+(c.engine=='prop'?250:430)+c.tail*14+(c.flaps?40:0)+(c.winglets?18:0)+c.payload;
+const e=.75+(c.winglets?.1:0),a=2*Math.PI*AR/(AR+2),CL0=.11*c.camber+(c.flaps?.45:0),CLmax=1.1+.1*c.camber+(c.flaps?.7:0);
+const A0=.28+.012*S+(c.gear?.22:0)+(c.flaps?.015*S:0)+c.tail*.03+.002*c.camber*S;
+return{m,S,AR,span,e,k:1/(Math.PI*e*AR),CD0:A0/S,CL0,CLmax,a,stab:c.tail/(.2*S),nmax:9-.4*AR,aS:(CLmax-CL0)/a/R}}
+function thrust(V,rho,t){const f=Math.pow(rho/1.225,.8);return t*f*(cfg.engine=='prop'?Math.min(3800,104000/Math.max(V,1)):9000)}
+let D=derive(),s,tip0=0,pitchCmd=0,thr=0,acc=0,msn;
+function reset(){s={x:0,y:0,vx:0,vy:0,th:0,t:0,crash:null,air:false,stalled:false,n:1,L:0,Dr:0,T:0,al:0,takeoff:null};
+msn={to:0,alt:0,ld:0,pay:0};$('pitch').value=0;$('thr').value=0;pitchCmd=0;thr=0;pitchUI()}
+function cfgChanged(){D=derive();reset();calc();prev()}
+$('rst').onclick=reset;$('full').onclick=()=>{$('thr').value=1;pitchUI()};
+function pitchUI(){pitchCmd=+$('pitch').value;thr=+$('thr').value;$('pO').textContent=pitchCmd+'°';$('tO').textContent=Math.round(thr*100)+'%'}
+$('pitch').oninput=$('thr').oninput=pitchUI;
+addEventListener('keydown',e=>{const k=e.key.toLowerCase(),M={arrowup:()=>$('pitch').value=pitchCmd+1,arrowdown:()=>$('pitch').value=pitchCmd-1,arrowright:()=>$('thr').value=thr+.05,arrowleft:()=>$('thr').value=thr-.05,w:()=>$('pitch').value=pitchCmd+1,s:()=>$('pitch').value=pitchCmd-1,g:()=>tog('gear',1),f:()=>tog('flaps',1)};
+if(M[k]){M[k]();pitchUI();if(k=='f'||k=='g')D=derive();e.preventDefault()}});
+function crash(r){s.crash=r}
+function aero(){const rho=1.225*Math.exp(-s.y/8500),V=Math.hypot(s.vx,s.vy),g=V>1?Math.atan2(s.vy,s.vx):0,al=s.th-g/R;
+let CL=D.CL0+D.a*al*R,st=CL>D.CLmax;if(st)CL=D.CLmax*.6;if(CL<-.9)CL=-.9;
+const CD=D.CD0+D.k*CL*CL+(st?.3:0),q=.5*rho*V*V;return{rho,V,g,al,st,L:q*D.S*CL,Dr:q*D.S*CD,CL}}
+function step(dt){s.t+=dt;D=derive();const W=D.m*9.81,A=aero();s.stalled=A.st;s.al=A.al;
+const onG=s.y<=.001;
+if(!onG&&D.stab<1)s.th+=(1-D.stab)*A.al*.9*dt;
+s.th+=(pitchCmd-s.th)*2.2*dt;if(onG)s.th=Math.max(0,Math.min(12,s.th));
+const B=aero(),T=thrust(B.V,B.rho,thr);s.L=B.L;s.Dr=B.Dr;s.T=T;
+let ax=(-B.L*Math.sin(B.g)-B.Dr*Math.cos(B.g)+T*Math.cos(s.th*R))/D.m,
+ay=(B.L*Math.cos(B.g)-B.Dr*Math.sin(B.g)+T*Math.sin(s.th*R)-W)/D.m;
+s.n=B.L/W;if(s.n>D.nmax)return crash('ფრთა გატყდა! გადატვირთვა '+s.n.toFixed(1)+'G > '+D.nmax.toFixed(1)+'G. მაღალი AR ფრთა უფრო სუსტია.');
+if(onG&&ay<0){ay=0;s.vy=Math.max(0,s.vy);s.y=0;const fa=(cfg.gear?.03:.5)*Math.max(0,W-B.L)/D.m;
+if(s.vx>.05)ax-=fa;else if(ax<fa){ax=0;s.vx=0}else ax-=fa}
+s.vx+=ax*dt;s.vy+=ay*dt;s.x+=s.vx*dt;s.y+=s.vy*dt;
+if(s.y<0){const vi=-s.vy;s.y=0;if(vi>(cfg.gear?3.5:1.8))return crash('მძიმე დაჯდომა: ვერტიკალური სიჩქარე '+vi.toFixed(1)+' მ/წმ');s.vy=0}
+if(s.y>1&&!s.air){s.air=true;s.takeoff=s.x;if(s.x<=400)msn.to=1;if(cfg.payload>=300)msn.pay=1}
+if(s.y>300)msn.alt=1;
+if(s.air&&s.y<=0&&Math.hypot(s.vx,s.vy)<4&&cfg.gear){msn.ld=1}
+if(s.y<=0&&s.vx<3)s.air=s.air&&false||s.air&&s.vx>=3}
+// ---- drawing
+const cv=$('c'),ctx=cv.getContext('2d'),W0=900,H0=440,PX=280,hs=3,sc=1.5;
+const clouds=Array.from({length:14},(_,i)=>({x:i*190+(i*73%90),y:90+(i*137%700),r:30+(i*29%40)}));
+const parts=Array.from({length:90},()=>({x:Math.random()*400-200,y:Math.random()*220-110}));
+function arrow(x,y,dx,dy,col,t){const l=Math.hypot(dx,dy);if(l<4)return;ctx.strokeStyle=ctx.fillStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();const a=Math.atan2(dy,dx);ctx.beginPath();ctx.moveTo(x+dx,y+dy);ctx.lineTo(x+dx-9*Math.cos(a-.4),y+dy-9*Math.sin(a-.4));ctx.lineTo(x+dx-9*Math.cos(a+.4),y+dy-9*Math.sin(a+.4));ctx.fill();ctx.font='bold 12px sans-serif';ctx.fillText(t,x+dx+(dx>=0?6:-18),y+dy+(dy>=0?12:-4))}
+function draw(){const alt=s.y,py0=H0*.78-alt*sc-32,py=Math.max(H0*.38,py0),gS=py+alt*sc+32,k=Math.min(1,alt/3000);
+const g=ctx.createLinearGradient(0,0,0,gS);g.addColorStop(0,`rgb(${Math.round(60-45*k)},${Math.round(130-95*k)},${Math.round(220-120*k)})`);g.addColorStop(1,'#cfe6ff');ctx.fillStyle=g;ctx.fillRect(0,0,W0,H0);
+ctx.fillStyle='rgba(255,255,255,.8)';clouds.forEach(c=>{let sx=((c.x-s.x*.6)%2600+2600)%2600-300;const sy=gS-c.y*sc*.9;if(sy>-60&&sy<H0+60){ctx.beginPath();ctx.arc(sx,sy,c.r,0,6.3);ctx.arc(sx+c.r,sy+6,c.r*.8,0,6.3);ctx.arc(sx-c.r,sy+8,c.r*.7,0,6.3);ctx.fill()}});
+ctx.fillStyle='#4f9a4a';ctx.fillRect(0,gS,W0,H0);
+const X=w=>PX+(w-s.x)*hs;ctx.fillStyle='#555d66';ctx.fillRect(X(-300),gS,1500*hs,12);
+ctx.fillStyle='#fff';for(let w=-250;w<1200;w+=50)ctx.fillRect(X(w),gS+5,14,2);
+ctx.fillStyle='#e8a317';ctx.fillRect(X(400),gS-40,3,40);ctx.fillRect(X(400),gS-40,26,12);ctx.font='12px sans-serif';ctx.fillText('400 მ',X(400)-10,gS-46);
+ctx.fillStyle='rgba(255,255,255,.35)';for(let w=Math.floor((s.x-300)/100)*100;w<s.x+500;w+=100)ctx.fillRect(X(w),gS+20,2,10);
+// flow
+const V=Math.hypot(s.vx,s.vy),gam=V>1?Math.atan2(s.vy,s.vx):0,fx=-Math.cos(gam),fy=Math.sin(gam);
+ctx.save();ctx.translate(PX,py);ctx.lineWidth=1.5;parts.forEach(p=>{const sp=V*.9*.016*hs*1.2;p.x+=fx*sp*2.2;p.y+=fy*sp*2.2;if(Math.abs(p.x)>200||Math.abs(p.y)>110){const a=Math.atan2(-fy,-fx);p.x=-fx*190+(Math.random()-.5)*20*Math.abs(fy);p.y=(Math.random()-.5)*200;if(Math.abs(fx)<.3){p.x=(Math.random()-.5)*380;p.y=-fy*100}}
+const d=Math.hypot(p.x,p.y);let ox=0,oy=0;if(d<70&&V>3){oy=-(70-d)*.12;if(s.stalled){oy+=(Math.random()-.5)*14;ox=(Math.random()-.5)*10}}
+ctx.strokeStyle=s.stalled&&d<90?'rgba(255,110,60,.8)':'rgba(255,255,255,.55)';ctx.beginPath();ctx.moveTo(p.x+ox,p.y+oy);ctx.lineTo(p.x+ox-fx*14,p.y+oy-fy*14);ctx.stroke()});ctx.restore();
+// plane
+ctx.save();ctx.translate(PX,py);ctx.rotate(-s.th*R);
+ctx.fillStyle='#4f8cff';ctx.beginPath();ctx.moveTo(-50,-4);ctx.lineTo(-68,-36);ctx.lineTo(-52,-36);ctx.lineTo(-30,-8);ctx.fill();
+ctx.fillStyle='#9fb4cc';const tw=8+cfg.tail*4;ctx.fillRect(-64-tw*.3,-3,tw,4);
+ctx.fillStyle='#eef3f8';ctx.beginPath();ctx.ellipse(0,0,64,13,0,0,6.3);ctx.fill();ctx.strokeStyle='#6c7f95';ctx.lineWidth=1;ctx.stroke();
+ctx.fillStyle='#294a73';ctx.beginPath();ctx.ellipse(28,-5,13,6,0,0,6.3);ctx.fill();
+const ch=D.S/D.span*9;ctx.fillStyle='#3a6bc4';ctx.beginPath();ctx.ellipse(0,6,ch,3+cfg.camber*.6,0,0,6.3);ctx.fill();
+if(cfg.flaps){ctx.save();ctx.translate(-ch,7);ctx.rotate(.5);ctx.fillStyle='#f5a524';ctx.fillRect(-12,0,14,3);ctx.restore()}
+if(cfg.gear){ctx.strokeStyle='#333';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(6,12);ctx.lineTo(6,25);ctx.moveTo(42,10);ctx.lineTo(42,22);ctx.stroke();ctx.fillStyle='#222';ctx.beginPath();ctx.arc(6,27,5,0,6.3);ctx.arc(42,24,4,0,6.3);ctx.fill()}
+if(cfg.engine=='prop'){ctx.strokeStyle='rgba(60,60,60,.7)';ctx.lineWidth=3;const h=18*Math.abs(Math.sin(s.t*(8+thr*30)));ctx.beginPath();ctx.moveTo(66,-h);ctx.lineTo(66,h);ctx.stroke()}
+else{ctx.fillStyle='#8a97a6';ctx.beginPath();ctx.ellipse(-4,19,24,7,0,0,6.3);ctx.fill();if(thr>.05){ctx.fillStyle=`rgba(255,${150+Math.random()*60|0},40,.9)`;ctx.beginPath();ctx.moveTo(-26,19);ctx.lineTo(-26-thr*(30+Math.random()*10),19);ctx.lineTo(-26,23);ctx.fill()}}
+ctx.restore();
+// forces
+const W=D.m*9.81,u=70/W;arrow(PX,py,-s.L*Math.sin(gam)*u*1.3,-s.L*Math.cos(gam)*u*1.3,'#1976ff','ამწევი');arrow(PX,py,0,W*u*1.3,'#e23b3b','წონა');
+arrow(PX,py,s.T*Math.cos(s.th*R)*u*1.3,-s.T*Math.sin(s.th*R)*u*1.3,'#1aa05a','წევა');arrow(PX,py,-s.Dr*Math.cos(gam)*u*1.3,s.Dr*Math.sin(gam)*u*1.3,'#f08a00','წინააღმდ.');
+if(s.stalled&&!s.crash){ctx.fillStyle='rgba(214,64,47,.9)';ctx.font='800 26px sans-serif';ctx.fillText('⚠ სტოლი!',W0/2-50,50)}
+if(s.crash){ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(0,0,W0,H0);ctx.fillStyle='#fff';ctx.font='800 30px sans-serif';ctx.fillText('💥 კატასტროფა',W0/2-120,H0/2-20);ctx.font='16px sans-serif';wrap(s.crash,W0/2-300,H0/2+14,600)}}
+function wrap(t,x,y,w){let l='';t.split(' ').forEach(wd=>{if(ctx.measureText(l+wd).width>w){ctx.fillText(l,x,y);y+=22;l=''}l+=wd+' '});ctx.fillText(l,x,y)}
+// ---- analysis
+function calc(){const d=D,W=d.m*9.81,rho=1.225;let Vs=Math.sqrt(2*W/(rho*d.S*d.CLmax)),Vmax=0,roc=0;
+for(let V=Vs*1.05;V<350;V+=1){const CL=2*W/(rho*V*V*d.S),Dr=.5*rho*V*V*d.S*(d.CD0+d.k*CL*CL),T=thrust(V,rho,1);if(T>=Dr){Vmax=V;roc=Math.max(roc,(T-Dr)*V/W)}}
+const ld=.5*Math.sqrt(Math.PI*d.e*d.AR/d.CD0),rows=[['მასა',Math.round(d.m)+' კგ'],['ფრთის სიგრძე',d.span.toFixed(1)+' მ'],['დატვირთვა ფრთაზე',Math.round(d.m/d.S)+' კგ/მ²'],['სტოლის სიჩქარე',Math.round(Vs*3.6)+' კმ/სთ'],['აფრენის სიჩქარე ≈',Math.round(Vs*1.15*3.6)+' კმ/სთ'],['მაქს. სიჩქარე',Math.round(Vmax*3.6)+' კმ/სთ'],['მაქს. ასვლა',roc.toFixed(1)+' მ/წმ'],['საუკეთესო L/D',ld.toFixed(1)],['წევა/წონა',(thrust(1,1.225,1)/W).toFixed(2)],['კუდის სტაბილურობა',d.stab<.8?'⚠ სუსტი':d.stab>1.8?'ზედმეტი':'✔ კარგი'],['მაქს. გადატვირთვა',d.nmax.toFixed(1)+' G']];
+$('st').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}
+function prev(){const c=$('pv').getContext('2d'),w=300,h=190;c.clearRect(0,0,w,h);const k=Math.min(11,260/D.span),cx=150,cy=95,ch=D.S/D.span*k,sp=D.span*k/2;
+c.fillStyle='#c9d6e6';c.fillRect(0,0,w,h);c.fillStyle='#eef3f8';c.strokeStyle='#6c7f95';
+c.beginPath();c.ellipse(cx,cy,70,9,0,0,6.3);c.fill();c.stroke();
+c.fillStyle='#3a6bc4';c.beginPath();c.moveTo(cx+10,cy-6);c.lineTo(cx+10-ch,cy-sp);c.lineTo(cx-ch*.3,cy-sp);c.lineTo(cx-ch,cy-6);c.lineTo(cx-ch,cy+6);c.lineTo(cx-ch*.3,cy+sp);c.lineTo(cx+10-ch,cy+sp);c.lineTo(cx+10,cy+6);c.fill();
+if(cfg.winglets){c.fillStyle='#f5a524';c.fillRect(cx-ch-2,cy-sp-5,ch*.8,5);c.fillRect(cx-ch-2,cy+sp,ch*.8,5)}
+if(cfg.flaps){c.fillStyle='#f5a524';c.fillRect(cx-ch-3,cy-sp*.7,4,sp*.5);c.fillRect(cx-ch-3,cy+sp*.2,4,sp*.5)}
+const tw=cfg.tail*4.5,th=Math.max(8,cfg.tail*3.2);c.fillStyle='#9fb4cc';c.fillRect(cx-70-tw*.7,cy-th,tw,th*2);
+if(cfg.engine=='jet'){c.fillStyle='#8a97a6';c.fillRect(cx-ch-8,cy-sp*.45-6,ch+10,12);c.fillRect(cx-ch-8,cy+sp*.45-6,ch+10,12)}else{c.strokeStyle='#444';c.lineWidth=3;c.beginPath();c.moveTo(cx+72,cy-16);c.lineTo(cx+72,cy+16);c.stroke()}
+c.fillStyle='#14202e';c.font='11px sans-serif';c.fillText('ხედი ზემოდან',6,14)}
+function polar(){const c=$('pl').getContext('2d'),w=300,h=170;c.clearRect(0,0,w,h);const X=a=>30+(a+8)/32*260,Y=v=>h-24-(v+1)/3.6*(h-40);
+c.fillStyle='#cfdceb';c.fillRect(0,0,w,h);c.strokeStyle='#8aa0ba';c.lineWidth=1;c.beginPath();c.moveTo(X(-8),Y(0));c.lineTo(X(24),Y(0));c.moveTo(X(0),Y(-1));c.lineTo(X(0),Y(2.6));c.stroke();
+c.strokeStyle='#2b6df0';c.lineWidth=2.5;c.beginPath();let st=false;for(let a=-8;a<=24;a+=.5){let cl=D.CL0+D.a*a*R;if(cl>D.CLmax)cl=D.CLmax*(a>D.aS+.4?.6:1);c[st?'lineTo':'moveTo'](X(a),Y(cl));st=true}c.stroke();
+const al=Math.max(-8,Math.min(24,s.al));let cl=D.CL0+D.a*al*R;if(cl>D.CLmax)cl=D.CLmax*.6;c.fillStyle=s.stalled?'#d6402f':'#1a9d5a';c.beginPath();c.arc(X(al),Y(cl),6,0,6.3);c.fill();
+c.fillStyle='#14202e';c.font='11px sans-serif';c.fillText('α (°) →',250,Y(0)-4);c.fillText('CL',34,12)}
+const facts=['💡 ამწევი ძალა იზრდება სიჩქარის კვადრატით: სიჩქარე ×2 → ამწევი ×4.','💡 გრძელი, ვიწრო ფრთა (მაღალი AR) ამცირებს ინდუცირებულ წინააღმდეგობას, მაგრამ უფრო სუსტია.','💡 ვინგლეტები ამცირებენ ფრთის ბოლოებზე მორევებს და ზოგავენ საწვავს.','💡 ფლაპები ზრდიან CLmax-ს – ნელა დაფრენა შესაძლებელია, მაგრამ წინააღმდეგობაც იზრდის.','💡 ბორბლების შეკეცვა ამცირებს პარაზიტულ წინააღმდეგობას (გამოსცადე G ღილაკი).','💡 ყოველი ფრთისთვის არსებობს კრიტიკული კუთხე (~15°), რომლის შემდეგ ნაკადი წყდება – სტოლი.','💡 სიმაღლეზე ჰაერი თხელია: ამწევი და ძრავის წევა მცირდება.'];
+function ui(){const V=Math.hypot(s.vx,s.vy);
+$('hud').innerHTML=`<span><b>${Math.round(V*3.6)}</b> კმ/სთ</span><span>სიმაღლე <b>${Math.round(s.y)}</b> მ</span><span>ვერტ. <b>${s.vy.toFixed(1)}</b> მ/წმ</span><span>α <b>${s.al.toFixed(1)}°</b></span><span>დისტ. <b>${Math.round(s.x)}</b> მ</span><span><b>${s.n.toFixed(1)}</b> G</span>`;
+let t,w=false,onG=s.y<=.001;
+if(s.crash){t='სცადე ხელახლა: შეცვალე კომპონენტები ან პილოტირების სტილი.';w=true}
+else if(s.stalled&&!onG){t='⚠ სტოლი! α აჭარბებს კრიტიკულ კუთხეს – ნაკადი წყდება, ამწევი ეცემა. დაუშვი ცხვირი და მიამატე გაზი.';w=true}
+else if(onG&&V<2&&thr<.1)t='გაზი ↑ (→ ღილაკი ან სლაიდერი), გაიქეცი ტრასაზე და სიჩქარის ზრდისას აწიე ცხვირი.';
+else if(onG&&V>D.Vr)t='აწიე ცხვირი! ';
+else if(D.stab<.8&&!onG){t='⚠ კუდი ძალიან პატარაა – თვითმფრინავი არასტაბილურია და ცხვირს თვითონ აიწევს. გაზარდე ჰორიზონტალური კუდი.';w=true}
+else if(cfg.gear&&s.y>60)t='ბორბლები ჯერ გარეთაა – დააჭირე G და შეამცირე წინააღმდეგობა.';
+else{tip0+=.016;t=facts[Math.floor(tip0/8)%facts.length]}
+if(onG&&V>20&&V<D.Vs*1.3&&!s.crash){t='აფრენის სიჩქარე ახლოვდება – '+Math.round(D.Vs*1.15*3.6)+' კმ/სთ-ზე აწიე ცხვირი (θ≈10°).';w=false}
+$('tip').className=w?'warn':'';$('tip').textContent=t;
+$('ms').innerHTML=[['აფრენა 400 მ-ზე ნაკლებ მანძილზე','to'],['ასვლა 300 მ სიმაღლეზე','alt'],['აფრენა 300+ კგ ტვირთით','pay'],['უსაფრთხო დაფრენა ბორბლებზე','ld']].map(m=>`<li class="${msn[m[1]]?'d':''}">${msn[m[1]]?'✔':'○'} ${m[0]}</li>`).join('');polar()}
+let last=0;function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;if(!s.crash){acc+=dt;while(acc>1/60){step(1/60);acc-=1/60}}draw();ui();requestAnimationFrame(loop)}
+D=derive();D.Vr=0;const _d=derive;derive=function(){const d=_d();d.Vs=Math.sqrt(2*d.m*9.81/(1.225*d.S*d.CLmax));d.Vr=d.Vs*1.15;return d};
+D=derive();SL.forEach(([k,,u])=>$('v_'+k).textContent=cfg[k]+' '+u);reset();calc();prev();requestAnimationFrame(loop);
+</script></body></html>
